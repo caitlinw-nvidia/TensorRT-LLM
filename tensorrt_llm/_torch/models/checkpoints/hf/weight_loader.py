@@ -79,7 +79,8 @@ class HfWeightLoader(BaseWeightLoader):
             weight_files = filtered_weight_files
         if weight_files:
             num_layers = int(os.environ.get("TLLM_OVERRIDE_LAYER_NUM", "0"))
-            if is_device_integrated():
+            if is_device_integrated() and os.environ.get(
+                    "TLLM_DISABLE_MMAP_WEIGHT_LOADER", "0") != "1":
                 logger.info(
                     "Integrated GPU: using mmap-backed safetensors loading "
                     "(no prefetch, no parallel shard load).")
