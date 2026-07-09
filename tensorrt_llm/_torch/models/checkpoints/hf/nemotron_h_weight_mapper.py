@@ -145,8 +145,13 @@ class NemotronHHfWeightMapper(HfWeightMapper):
                             new_weights[w3_key] = weights[name]
                             new_weights[w1_key] = weights[name]
                         elif "weight_scale" in key:
-                            # NVFP4 case.
-                            if weights[name].shape:
+                            # NVFP4 case. On integrated GPUs the loader hands
+                            # out lazy safetensors slices (PySafeSlice), which
+                            # expose get_shape() instead of .shape.
+                            _w = weights[name]
+                            _w_shape = _w.shape if hasattr(
+                                _w, "shape") else _w.get_shape()
+                            if _w_shape:
                                 # w3 weight (gate_proj) scale should be empty for Nemotron-H MoE model.
                                 # Use [:0] to keep the same input dimension as the other weights.
                                 # The w3 weight_scale shape should be [0, input_dim].
