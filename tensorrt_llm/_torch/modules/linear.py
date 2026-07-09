@@ -2139,6 +2139,17 @@ class W4A16NVFP4LinearMethod(NVFP4LinearMethod):
             original_shape = input.shape
             input = input.reshape(-1, input.shape[-1])
 
+        # B12X_DENSE_W4A16=1: same routing hook as NVFP4LinearMethod.apply —
+        # this subclass overrides apply(), so the parent's b12x dispatch
+        # never runs for W4A16_NVFP4 layers without repeating it here.
+        # Falls through to the W4A16 cuda-core/cutlass3 path when b12x
+        # declines the call (M below min-M dispatch, shape constraints).
+        if _b12x_w4a16_enabled() and isinstance(input, torch.Tensor):
+            b12x_output = _maybe_apply_b12x_w4a16(module, input, bias,
+                                                  original_shape)
+            if b12x_output is not None:
+                return b12x_output
+
         if module.pre_quant_scale is not None:
             assert input.dtype == module.pre_quant_scale.dtype, "Input dtype and pre_quant_scale dtype must match"
             input = input * module.pre_quant_scale
