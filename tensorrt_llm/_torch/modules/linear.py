@@ -1,3 +1,18 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 import enum
@@ -30,6 +45,10 @@ from tensorrt_llm.quantization.utils.fp8_utils import (
 
 from ..._utils import get_sm_version, is_sm_100f
 from ...models.modeling_utils import QuantConfig
+from ..cute_dsl_kernels.blackwell.w4a16_nvfp4_m1 import \
+    DenseGemmW4A16CuteM1Kernel as _W4A16_NVFP4_CUTE_M1_KERNEL_CLS
+from ..cute_dsl_kernels.blackwell.w4a16_nvfp4_m1 import \
+    w4a16_nvfp4_cute_m1_gemv as _w4a16_nvfp4_cute_m1_gemv
 from ..utils import (Fp4QuantizedTensor, get_model_extra_attrs,
                      is_nvfp4_marlin_enabled,
                      replace_parameter_and_save_metadata, unswizzle_sf)
@@ -1904,6 +1923,23 @@ class NVFP4LinearMethod(LinearMethodBase):
 class W4A16NVFP4LinearMethod(NVFP4LinearMethod):
     CUDA_CORE_MAX_M: ClassVar[int] = 16
     CUTLASS3_ENV: ClassVar[str] = "TRTLLM_W4A16_NVFP4_CUTLASS3"
+    DISABLE_CUTE_M1_ENV: ClassVar[
+        str] = "TRTLLM_W4A16_NVFP4_DISABLE_CUTE_M1"
+    def _can_use_cute_m1(self, module: Linear, input: torch.Tensor,
+                         m: int) -> bool:
+        if os.environ.get(self.DISABLE_CUTE_M1_ENV, "0") == "1":
+            return False
+        if m != 1 or input.dim() != 2:
+            return False
+        if get_sm_version() not in (120, 121):
+            return False
+        if input.dtype != torch.bfloat16:
+            return False
+        if module.dtype != torch.bfloat16:
+            return False
+        k = input.shape[-1]
+        n = module.weight.shape[0]
+        return _W4A16_NVFP4_CUTE_M1_KERNEL_CLS.is_supported(m, k, n)
 
     def _can_use_cutlass3_w4a16_prefill(self, module: Linear,
                                         input: torch.Tensor, m: int) -> bool:
@@ -2011,21 +2047,39 @@ class W4A16NVFP4LinearMethod(NVFP4LinearMethod):
             original_shape = input.shape
             input = input.reshape(-1, input.shape[-1])
 
+        use_cute_m1 = self._can_use_cute_m1(module, input, m)
+
         if module.pre_quant_scale is not None:
             assert input.dtype == module.pre_quant_scale.dtype, \
                 "Input dtype and pre_quant_scale dtype must match"
             input = input * module.pre_quant_scale
 
-        gemm_op = (torch.ops.trtllm.w4a16_nvfp4_cutlass_gemm if
-                   use_cutlass3_prefill else torch.ops.trtllm.w4a16_nvfp4_gemm)
-        output = gemm_op(
-            input,
-            module.weight,
-            module.weight_scale,
-            module.weight_scale_2,
-            module.dtype,
-            bias=None,
-        )
+        if use_cute_m1:
+            n = module.weight.shape[0]
+            k = input.shape[-1]
+            scale_rows = fp4_utils.pad_up(n, 128)
+            scale_cols = fp4_utils.pad_up(k // module.scaling_vector_size,
+                                          4)
+            weight_scale = module.weight_scale.view(scale_rows, scale_cols)
+            output = _w4a16_nvfp4_cute_m1_gemv(
+                input.contiguous(),
+                module.weight,
+                weight_scale,
+                module.weight_scale_2,
+                out=None,
+            )
+        else:
+            gemm_op = (torch.ops.trtllm.w4a16_nvfp4_cutlass_gemm if
+                       use_cutlass3_prefill else
+                       torch.ops.trtllm.w4a16_nvfp4_gemm)
+            output = gemm_op(
+                input,
+                module.weight,
+                module.weight_scale,
+                module.weight_scale_2,
+                module.dtype,
+                bias=None,
+            )
 
         if output.shape[-1] > module.out_features:
             output = output[..., :module.out_features].contiguous()
