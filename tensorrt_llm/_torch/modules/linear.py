@@ -30,6 +30,12 @@ from tensorrt_llm.quantization.utils.fp8_utils import (
 
 from ..._utils import get_sm_version, is_sm_100f
 from ...models.modeling_utils import QuantConfig
+from ..cute_dsl_kernels.blackwell.w4a16_nvfp4_m1 import \
+    DenseGemmW4A16CuteM1Kernel as _W4A16_NVFP4_CUTE_M1_KERNEL_CLS
+from ..cute_dsl_kernels.blackwell.w4a16_nvfp4_m1 import \
+    w4a16_nvfp4_cute_m1_gemv as _w4a16_nvfp4_cute_m1_gemv
+from ..cute_dsl_kernels.blackwell.w4a16_nvfp4_prefill import \
+    w4a16_nvfp4_prefill as _w4a16_nvfp4_prefill
 from ..utils import (Fp4QuantizedTensor, get_model_extra_attrs,
                      is_nvfp4_marlin_enabled,
                      replace_parameter_and_save_metadata, unswizzle_sf)
@@ -2100,7 +2106,31 @@ class W4A16NVFP4LinearMethod(NVFP4LinearMethod):
 
 
 class MarlinNVFP4LinearMethod(W4A16NVFP4LinearMethod):
-    """W4A16 NVFP4 linear backed by Marlin."""
+    """W4A16 NVFP4 linear with CuTe decode and AutoTuned prefill."""
+
+    DISABLE_CUTE_M1_ENV: ClassVar[str] = "TRTLLM_W4A16_NVFP4_DISABLE_CUTE_M1"
+
+    def create_weights(self, module: Linear, in_features: int,
+                       out_features: int, bias: bool, dtype: torch.dtype):
+        super().create_weights(module, in_features, out_features, bias, dtype)
+        # The Marlin transform replaces ``weight`` and ``weight_scale`` with
+        # its repacked layouts. Register placeholders up front so GMS readers
+        # know about the original-layout tensors materialized by the writer.
+        module.register_buffer("_w4a16_cute_weight",
+                               torch.empty(0,
+                                           dtype=torch.uint8,
+                                           device=module.weight.device),
+                               persistent=False)
+        module.register_buffer("_w4a16_cute_weight_scale",
+                               torch.empty(0,
+                                           dtype=torch.uint8,
+                                           device=module.weight_scale.device),
+                               persistent=False)
+        module.register_buffer("_w4a16_b12x_weight_scale",
+                               torch.empty(0,
+                                           dtype=torch.uint8,
+                                           device=module.weight_scale.device),
+                               persistent=False)
 
     @staticmethod
     def is_supported(module: Linear) -> bool:
@@ -2124,9 +2154,19 @@ class MarlinNVFP4LinearMethod(W4A16NVFP4LinearMethod):
 
         size_k_pad = fp4_utils.pad_up(size_k, 64)
         size_n_pad = fp4_utils.pad_up(size_n, 128)
+        fp4_utils.pad_up(size_k // group_size, 4)
+        # Keep the checkpoint weight layout before Marlin replaces the public
+        # parameters with its own packed representations.
+        module._w4a16_cute_weight = weight
+        # V6 consumes the checkpoint's original tensor-core-interleaved FP8
+        # scale layout. Preserve it separately from the M=1 row-major copy.
+        module._w4a16_b12x_weight_scale = weight_scale
         num_groups = size_k // group_size
         scale_unswizzled = torch.ops.trtllm.block_scale_interleave_reverse(
             weight_scale.view(size_n_pad, -1))
+        # The CUDA-core M=1 kernel consumes scales row-major. Materialize that
+        # padded layout once at weight transformation, not on every decode.
+        module._w4a16_cute_weight_scale = scale_unswizzled.contiguous()
         scale_2d = scale_unswizzled[:size_n, :num_groups]
 
         if size_k_pad != size_k or size_n_pad != size_n:
@@ -2179,9 +2219,52 @@ class MarlinNVFP4LinearMethod(W4A16NVFP4LinearMethod):
         module._marlin_size_k = fp4_utils.pad_up(module.in_features, 64)
         module._marlin_size_n = fp4_utils.pad_up(module.out_features, 128)
 
+    def _can_use_cute_m1(self, module: Linear, input: torch.Tensor) -> bool:
+        if os.environ.get(self.DISABLE_CUTE_M1_ENV, "0") == "1":
+            return False
+        if (input.dim() != 2 or input.shape[0] != 1
+                or get_sm_version() not in (120, 121)
+                or input.dtype != torch.bfloat16
+                or module.dtype != torch.bfloat16):
+            return False
+        weight = getattr(module, "_w4a16_cute_weight", None)
+        weight_scale = getattr(module, "_w4a16_cute_weight_scale", None)
+        if (weight is None or weight_scale is None or weight.numel() == 0
+                or weight_scale.numel() == 0):
+            return False
+        return _W4A16_NVFP4_CUTE_M1_KERNEL_CLS.is_supported(
+            1, input.shape[1], module.out_features)
+
     def apply(self, module: Linear, input: torch.Tensor,
               bias: Optional[torch.Tensor]):
         input, original_shape = self._prepare_input(module, input)
+        if self._can_use_cute_m1(module, input):
+            output = _w4a16_nvfp4_cute_m1_gemv(
+                input.contiguous(),
+                module._w4a16_cute_weight,
+                module._w4a16_cute_weight_scale,
+                module.weight_scale_2,
+                out=None,
+            )
+            return self._restore_output(output, original_shape, bias)
+
+        raw_weight = getattr(module, "_w4a16_cute_weight", None)
+        raw_weight_scale = getattr(module, "_w4a16_b12x_weight_scale", None)
+        if (raw_weight is not None and raw_weight_scale is not None
+                and raw_weight.numel() > 0 and raw_weight_scale.numel() > 0):
+            output = _w4a16_nvfp4_prefill(
+                input.contiguous(),
+                raw_weight,
+                raw_weight_scale,
+                module.weight_scale_2,
+                module.weight,
+                module.weight_scale,
+                module.weight_global_scale,
+            )
+            return self._restore_output(output, original_shape, bias)
+
+        # Defensive fallback for modules constructed without transform_weights
+        # (primarily isolated tests and external wrappers).
         size_k = module.in_features
         size_n = module.out_features
         size_k_pad = getattr(module, "_marlin_size_k", size_k)
