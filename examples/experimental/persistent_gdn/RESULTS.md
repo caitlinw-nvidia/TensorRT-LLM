@@ -53,6 +53,18 @@ resident implementation:
 The reversed-order pair rules out the simple explanation that resident always
 benefited from running second.
 
+## Updated interpretation
+
+A subsequent traffic-matched kernel microbenchmark found that the CUDA C++
+rewrite takes 54.4070 us when it reloads and writes BF16 state, versus 15.9312
+us for the FlashInfer CUTLASS/CuTe kernel. The rewrite is therefore 3.42x
+slower at the isolated GDN operation.
+
+The E2E improvement below must not be interpreted as evidence that the
+rewritten GDN computation is faster. It is a system-level result that still
+needs to be reconciled with the kernel measurement. See
+`MICROBENCH_RESULTS.md`.
+
 ## Persistence and writeback
 
 Every resident run logged:

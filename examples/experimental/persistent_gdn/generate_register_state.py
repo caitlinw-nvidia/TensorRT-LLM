@@ -124,6 +124,35 @@ for macro, destination in (
         lines.extend(["      break; \\", "    } \\"])
     lines.extend(["    default: { BODY_DEFAULT; break; } \\", "  }", ""])
 
+for macro, statement_template in (
+    (
+        "GDN_LOAD_RF_BF16_SWITCH",
+        (
+            "REG = rf_row_valid(tid, S, row_base) "
+            "? __bfloat162float(state[rf_layer_offset(tid, S, row_base)]) "
+            ": 0.0f"
+        ),
+    ),
+    (
+        "GDN_STORE_RF_BF16_SWITCH",
+        (
+            "if (rf_row_valid(tid, S, row_base)) "
+            "{ state[rf_layer_offset(tid, S, row_base)] = "
+            "__float2bfloat16_rn(REG); }"
+        ),
+    ),
+):
+    lines.append(f"#define {macro}(RUNTIME_LAYER, BODY_DEFAULT) \\")
+    lines.append("  switch (RUNTIME_LAYER) { \\")
+    for layer in range(LAYERS):
+        lines.append(f"    case {layer}: {{ \\")
+        for slot in range(VALUES_PER_LAYER_PER_THREAD):
+            reg = name(layer * VALUES_PER_LAYER_PER_THREAD + slot)
+            statement = statement_template.replace("REG", reg).replace("S", str(slot))
+            lines.append(f"      {statement}; \\")
+        lines.extend(["      break; \\", "    } \\"])
+    lines.extend(["    default: { BODY_DEFAULT; break; } \\", "  }", ""])
+
 lines.append("// clang-format on")
 
 Path(__file__).with_name("register_state_generated.cuh").write_text("\n".join(lines) + "\n")

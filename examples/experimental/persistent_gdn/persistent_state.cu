@@ -25,6 +25,7 @@
 #include <cstdint>
 #include <cstring>
 #include <mutex>
+#include <utility>
 
 #include "register_state_generated.cuh"
 
@@ -56,6 +57,8 @@ enum Opcode : uint32_t
     kStopAndEvict = 5,
     kGdnDecode = 6,
     kStopWithoutEvict = 7,
+    kGdnDecodeAndWrite = 8,
+    kGdnDecodeRoundTrip = 9,
 };
 
 struct alignas(64) ServiceControl
@@ -77,6 +80,7 @@ struct alignas(64) ServiceControl
     uint64_t a_log;
     uint64_t dt_bias;
     uint64_t output;
+    uint64_t state;
 };
 
 __device__ __forceinline__ int64_t rf_global_offset(int layer, int tid, int slot, int row_base)
@@ -87,6 +91,15 @@ __device__ __forceinline__ int64_t rf_global_offset(int layer, int tid, int slot
     int const row = row_base + local_row;
     // The 128 CTAs partition all 4096 rows exactly.
     return (static_cast<int64_t>(layer) * kRows + row) * kK + k;
+}
+
+__device__ __forceinline__ int64_t rf_layer_offset(int tid, int slot, int row_base)
+{
+    int const local = tid + slot * kThreads;
+    int const local_row = local / kK;
+    int const k = local % kK;
+    int const row = row_base + local_row;
+    return static_cast<int64_t>(row) * kK + k;
 }
 
 __device__ __forceinline__ bool rf_row_valid(int tid, int slot, int row_base)
@@ -224,6 +237,7 @@ __global__ __maxnreg__(GDN_MAX_REGS) void persistent_state_kernel(ServiceControl
     __shared__ uint64_t command_a_log;
     __shared__ uint64_t command_dt_bias;
     __shared__ uint64_t command_output;
+    __shared__ uint64_t command_state;
     __shared__ float rf_stage[kRfRowsPerCta * kK];
     __shared__ float q_inv_norm[16];
     __shared__ float k_inv_norm[16];
@@ -320,6 +334,7 @@ __global__ __maxnreg__(GDN_MAX_REGS) void persistent_state_kernel(ServiceControl
             command_a_log = control->a_log;
             command_dt_bias = control->dt_bias;
             command_output = control->output;
+            command_state = control->state;
         }
         __syncthreads();
 
@@ -349,8 +364,41 @@ __global__ __maxnreg__(GDN_MAX_REGS) void persistent_state_kernel(ServiceControl
             }
             tmem_wait_store();
         }
-        else if (opcode == kGdnDecode)
+        else if (opcode == kGdnDecode || opcode == kGdnDecodeAndWrite || opcode == kGdnDecodeRoundTrip)
         {
+            __nv_bfloat16* state = reinterpret_cast<__nv_bfloat16*>(command_state);
+            if (opcode == kGdnDecodeRoundTrip)
+            {
+                // Reload this layer from the same BF16 global-memory layout
+                // consumed by the FlashInfer baseline. This deliberately
+                // removes the persistence advantage for the matched
+                // microbenchmark.
+                GDN_LOAD_RF_BF16_SWITCH(layer, asm volatile(""));
+
+                int const warp_group = warp / 4;
+                int const part = warp % 4;
+#pragma unroll 1
+                for (int local_row = 0; local_row < kTmemRowsPerCta; ++local_row)
+                {
+                    int const linear_column = static_cast<int>(layer) * kTmemRowsPerCta + local_row;
+                    if ((linear_column & 1) != warp_group)
+                    {
+                        continue;
+                    }
+                    int const row = row_base + kRfRowsPerCta + local_row;
+                    int const k_index = part * 32 + lane;
+                    float value = 0.0f;
+                    if (row < kRows)
+                    {
+                        value = __bfloat162float(state[static_cast<int64_t>(row) * kK + k_index]);
+                    }
+                    tmem_store_one(
+                        tmem_address(tmem_base0, tmem_base1, static_cast<int>(layer), local_row, part), value);
+                }
+                tmem_wait_store();
+                __syncthreads();
+            }
+
             // Stage this layer's register-resident rows into shared memory so the
             // four-warp K-reduction groups can consume them.
             GDN_STAGE_RF_SWITCH(layer, asm volatile(""));
@@ -489,6 +537,35 @@ __global__ __maxnreg__(GDN_MAX_REGS) void persistent_state_kernel(ServiceControl
 
             // Return the updated 12 staged rows to their owning scalar registers.
             GDN_UNSTAGE_RF_SWITCH(layer, asm volatile(""));
+
+            if (opcode == kGdnDecodeAndWrite || opcode == kGdnDecodeRoundTrip)
+            {
+                // Round the updated state back to the baseline's BF16
+                // global-memory representation. The write-only mode starts
+                // from resident RF/TMEM; round-trip mode also reloads above.
+                GDN_STORE_RF_BF16_SWITCH(layer, asm volatile(""));
+
+                int const warp_group = warp / 4;
+                int const part = warp % 4;
+#pragma unroll 1
+                for (int local_row = 0; local_row < kTmemRowsPerCta; ++local_row)
+                {
+                    int const linear_column = static_cast<int>(layer) * kTmemRowsPerCta + local_row;
+                    if ((linear_column & 1) != warp_group)
+                    {
+                        continue;
+                    }
+                    int const row = row_base + kRfRowsPerCta + local_row;
+                    float value
+                        = tmem_load_one(tmem_address(tmem_base0, tmem_base1, static_cast<int>(layer), local_row, part));
+                    tmem_wait_load();
+                    if (row < kRows)
+                    {
+                        int const k_index = part * 32 + lane;
+                        state[static_cast<int64_t>(row) * kK + k_index] = __float2bfloat16_rn(value);
+                    }
+                }
+            }
         }
         else if (opcode == kStopAndEvict)
         {
@@ -704,13 +781,16 @@ void debug_command(torch::Tensor control, int64_t opcode, int64_t layer, double 
         static_cast<float>(delta), 0);
 }
 
-torch::Tensor gdn_decode(torch::Tensor control, int64_t layer, torch::Tensor q, torch::Tensor k, torch::Tensor v,
-    torch::Tensor a, torch::Tensor b, torch::Tensor a_log, torch::Tensor dt_bias)
+torch::Tensor gdn_decode_impl(torch::Tensor control, int64_t layer, torch::Tensor q, torch::Tensor k, torch::Tensor v,
+    torch::Tensor a, torch::Tensor b, torch::Tensor a_log, torch::Tensor dt_bias, torch::Tensor state,
+    torch::Tensor output, uint32_t opcode)
 {
     std::lock_guard<std::mutex> lock(g_mutex);
     TORCH_CHECK(g_running, "persistent state service is not running");
     TORCH_CHECK(control.is_same(g_control), "control tensor does not own active service");
     TORCH_CHECK(layer >= 0 && layer < kLayers, "layer must be in [0, 24)");
+    TORCH_CHECK(opcode == kGdnDecode || opcode == kGdnDecodeAndWrite || opcode == kGdnDecodeRoundTrip,
+        "invalid GDN decode opcode");
     validate_cuda_contiguous(q, torch::kBFloat16, 16 * 128, "q");
     validate_cuda_contiguous(k, torch::kBFloat16, 16 * 128, "k");
     validate_cuda_contiguous(v, torch::kBFloat16, 32 * 128, "v");
@@ -722,8 +802,21 @@ torch::Tensor gdn_decode(torch::Tensor control, int64_t layer, torch::Tensor q, 
             && a.device() == q.device() && b.device() == q.device() && a_log.device() == q.device()
             && dt_bias.device() == q.device(),
         "all GDN tensors must be on the service device");
+    if (opcode != kGdnDecode)
+    {
+        validate_cuda_contiguous(state, torch::kBFloat16, kRows * kK, "state");
+        TORCH_CHECK(state.device() == q.device(), "state must be on the service device");
+    }
+    if (output.defined())
+    {
+        validate_cuda_contiguous(output, torch::kBFloat16, 32 * 128, "output");
+        TORCH_CHECK(output.device() == q.device(), "output must be on the service device");
+    }
+    else
+    {
+        output = torch::empty({32, 128}, v.options());
+    }
 
-    auto output = torch::empty({32, 128}, v.options());
     const cudaStream_t current = at::cuda::getCurrentCUDAStream();
     stream_write64(current, control, offsetof(ServiceControl, q), reinterpret_cast<uint64_t>(q.data_ptr()));
     stream_write64(current, control, offsetof(ServiceControl, k), reinterpret_cast<uint64_t>(k.data_ptr()));
@@ -733,10 +826,35 @@ torch::Tensor gdn_decode(torch::Tensor control, int64_t layer, torch::Tensor q, 
     stream_write64(current, control, offsetof(ServiceControl, a_log), reinterpret_cast<uint64_t>(a_log.data_ptr()));
     stream_write64(current, control, offsetof(ServiceControl, dt_bias), reinterpret_cast<uint64_t>(dt_bias.data_ptr()));
     stream_write64(current, control, offsetof(ServiceControl, output), reinterpret_cast<uint64_t>(output.data_ptr()));
+    stream_write64(current, control, offsetof(ServiceControl, state),
+        state.defined() ? reinterpret_cast<uint64_t>(state.data_ptr()) : 0);
 
     const uint32_t epoch = ++g_epoch;
-    enqueue_command(current, control, epoch, kGdnDecode, static_cast<uint32_t>(layer), 0.0f, 0);
+    enqueue_command(current, control, epoch, opcode, static_cast<uint32_t>(layer), 0.0f, 0);
     return output;
+}
+
+torch::Tensor gdn_decode(torch::Tensor control, int64_t layer, torch::Tensor q, torch::Tensor k, torch::Tensor v,
+    torch::Tensor a, torch::Tensor b, torch::Tensor a_log, torch::Tensor dt_bias)
+{
+    return gdn_decode_impl(control, layer, std::move(q), std::move(k), std::move(v), std::move(a), std::move(b),
+        std::move(a_log), std::move(dt_bias), torch::Tensor(), torch::Tensor(), kGdnDecode);
+}
+
+torch::Tensor gdn_decode_into(torch::Tensor control, int64_t layer, torch::Tensor q, torch::Tensor k, torch::Tensor v,
+    torch::Tensor a, torch::Tensor b, torch::Tensor a_log, torch::Tensor dt_bias, torch::Tensor output)
+{
+    return gdn_decode_impl(control, layer, std::move(q), std::move(k), std::move(v), std::move(a), std::move(b),
+        std::move(a_log), std::move(dt_bias), torch::Tensor(), std::move(output), kGdnDecode);
+}
+
+torch::Tensor gdn_decode_gmem(torch::Tensor control, int64_t layer, torch::Tensor q, torch::Tensor k, torch::Tensor v,
+    torch::Tensor a, torch::Tensor b, torch::Tensor a_log, torch::Tensor dt_bias, torch::Tensor state, bool reload,
+    torch::Tensor output)
+{
+    return gdn_decode_impl(control, layer, std::move(q), std::move(k), std::move(v), std::move(a), std::move(b),
+        std::move(a_log), std::move(dt_bias), std::move(state), std::move(output),
+        reload ? kGdnDecodeRoundTrip : kGdnDecodeAndWrite);
 }
 
 torch::Tensor stop(torch::Tensor control)
@@ -784,6 +902,8 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, module)
     module.def("debug_command", &debug_command, "Run a staged debug command");
     module.def("add_layer", &add_layer, "Update one resident layer");
     module.def("gdn_decode", &gdn_decode, "Run one resident GDN decode layer");
+    module.def("gdn_decode_into", &gdn_decode_into, "Run one resident GDN decode layer into a provided output");
+    module.def("gdn_decode_gmem", &gdn_decode_gmem, "Run GDN decode with BF16 global-memory state writeback");
     module.def("stop", &stop, "Evict resident state once and stop");
     module.def("discard", &discard, "Discard resident state without global writeback");
 }

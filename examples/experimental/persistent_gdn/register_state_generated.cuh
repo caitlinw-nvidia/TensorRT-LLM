@@ -1280,4 +1280,446 @@
     default: { BODY_DEFAULT; break; } \
   }
 
+#define GDN_LOAD_RF_BF16_SWITCH(RUNTIME_LAYER, BODY_DEFAULT) \
+  switch (RUNTIME_LAYER) { \
+    case 0: { \
+      r000 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r001 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r002 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r003 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r004 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r005 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 1: { \
+      r006 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r007 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r008 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r009 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r010 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r011 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 2: { \
+      r012 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r013 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r014 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r015 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r016 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r017 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 3: { \
+      r018 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r019 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r020 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r021 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r022 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r023 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 4: { \
+      r024 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r025 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r026 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r027 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r028 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r029 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 5: { \
+      r030 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r031 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r032 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r033 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r034 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r035 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 6: { \
+      r036 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r037 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r038 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r039 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r040 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r041 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 7: { \
+      r042 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r043 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r044 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r045 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r046 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r047 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 8: { \
+      r048 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r049 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r050 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r051 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r052 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r053 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 9: { \
+      r054 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r055 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r056 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r057 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r058 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r059 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 10: { \
+      r060 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r061 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r062 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r063 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r064 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r065 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 11: { \
+      r066 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r067 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r068 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r069 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r070 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r071 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 12: { \
+      r072 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r073 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r074 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r075 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r076 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r077 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 13: { \
+      r078 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r079 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r080 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r081 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r082 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r083 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 14: { \
+      r084 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r085 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r086 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r087 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r088 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r089 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 15: { \
+      r090 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r091 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r092 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r093 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r094 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r095 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 16: { \
+      r096 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r097 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r098 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r099 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r100 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r101 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 17: { \
+      r102 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r103 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r104 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r105 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r106 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r107 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 18: { \
+      r108 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r109 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r110 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r111 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r112 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r113 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 19: { \
+      r114 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r115 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r116 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r117 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r118 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r119 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 20: { \
+      r120 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r121 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r122 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r123 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r124 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r125 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 21: { \
+      r126 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r127 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r128 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r129 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r130 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r131 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 22: { \
+      r132 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r133 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r134 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r135 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r136 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r137 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    case 23: { \
+      r138 = rf_row_valid(tid, 0, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 0, row_base)]) : 0.0f; \
+      r139 = rf_row_valid(tid, 1, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 1, row_base)]) : 0.0f; \
+      r140 = rf_row_valid(tid, 2, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 2, row_base)]) : 0.0f; \
+      r141 = rf_row_valid(tid, 3, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 3, row_base)]) : 0.0f; \
+      r142 = rf_row_valid(tid, 4, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 4, row_base)]) : 0.0f; \
+      r143 = rf_row_valid(tid, 5, row_base) ? __bfloat162float(state[rf_layer_offset(tid, 5, row_base)]) : 0.0f; \
+      break; \
+    } \
+    default: { BODY_DEFAULT; break; } \
+  }
+
+#define GDN_STORE_RF_BF16_SWITCH(RUNTIME_LAYER, BODY_DEFAULT) \
+  switch (RUNTIME_LAYER) { \
+    case 0: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r000); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r001); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r002); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r003); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r004); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r005); }; \
+      break; \
+    } \
+    case 1: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r006); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r007); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r008); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r009); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r010); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r011); }; \
+      break; \
+    } \
+    case 2: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r012); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r013); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r014); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r015); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r016); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r017); }; \
+      break; \
+    } \
+    case 3: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r018); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r019); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r020); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r021); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r022); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r023); }; \
+      break; \
+    } \
+    case 4: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r024); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r025); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r026); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r027); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r028); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r029); }; \
+      break; \
+    } \
+    case 5: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r030); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r031); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r032); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r033); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r034); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r035); }; \
+      break; \
+    } \
+    case 6: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r036); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r037); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r038); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r039); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r040); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r041); }; \
+      break; \
+    } \
+    case 7: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r042); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r043); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r044); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r045); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r046); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r047); }; \
+      break; \
+    } \
+    case 8: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r048); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r049); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r050); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r051); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r052); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r053); }; \
+      break; \
+    } \
+    case 9: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r054); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r055); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r056); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r057); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r058); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r059); }; \
+      break; \
+    } \
+    case 10: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r060); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r061); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r062); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r063); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r064); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r065); }; \
+      break; \
+    } \
+    case 11: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r066); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r067); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r068); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r069); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r070); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r071); }; \
+      break; \
+    } \
+    case 12: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r072); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r073); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r074); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r075); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r076); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r077); }; \
+      break; \
+    } \
+    case 13: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r078); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r079); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r080); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r081); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r082); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r083); }; \
+      break; \
+    } \
+    case 14: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r084); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r085); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r086); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r087); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r088); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r089); }; \
+      break; \
+    } \
+    case 15: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r090); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r091); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r092); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r093); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r094); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r095); }; \
+      break; \
+    } \
+    case 16: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r096); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r097); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r098); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r099); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r100); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r101); }; \
+      break; \
+    } \
+    case 17: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r102); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r103); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r104); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r105); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r106); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r107); }; \
+      break; \
+    } \
+    case 18: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r108); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r109); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r110); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r111); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r112); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r113); }; \
+      break; \
+    } \
+    case 19: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r114); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r115); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r116); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r117); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r118); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r119); }; \
+      break; \
+    } \
+    case 20: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r120); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r121); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r122); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r123); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r124); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r125); }; \
+      break; \
+    } \
+    case 21: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r126); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r127); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r128); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r129); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r130); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r131); }; \
+      break; \
+    } \
+    case 22: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r132); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r133); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r134); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r135); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r136); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r137); }; \
+      break; \
+    } \
+    case 23: { \
+      if (rf_row_valid(tid, 0, row_base)) { state[rf_layer_offset(tid, 0, row_base)] = __float2bfloat16_rn(r138); }; \
+      if (rf_row_valid(tid, 1, row_base)) { state[rf_layer_offset(tid, 1, row_base)] = __float2bfloat16_rn(r139); }; \
+      if (rf_row_valid(tid, 2, row_base)) { state[rf_layer_offset(tid, 2, row_base)] = __float2bfloat16_rn(r140); }; \
+      if (rf_row_valid(tid, 3, row_base)) { state[rf_layer_offset(tid, 3, row_base)] = __float2bfloat16_rn(r141); }; \
+      if (rf_row_valid(tid, 4, row_base)) { state[rf_layer_offset(tid, 4, row_base)] = __float2bfloat16_rn(r142); }; \
+      if (rf_row_valid(tid, 5, row_base)) { state[rf_layer_offset(tid, 5, row_base)] = __float2bfloat16_rn(r143); }; \
+      break; \
+    } \
+    default: { BODY_DEFAULT; break; } \
+  }
+
 // clang-format on

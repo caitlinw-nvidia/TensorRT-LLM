@@ -53,12 +53,15 @@ python examples/experimental/persistent_gdn/generate_register_state.py
 - `sitecustomize.py`: opt-in routing from TensorRT-LLM's PyTorch GDN function.
 - `test_gdn_decode.py`: 24 layers by two tokens against an FP32 PyTorch
   reference.
+- `bench_gdn_decode.py`: kernel-only FlashInfer versus CUDA C++ benchmark,
+  including BF16 global-memory write-only and read/write modes.
 - `test_persistent_state.py`: synthetic RF/TMEM retention test and extension
   builder.
 - `run_qwen35_9b_full_ab.sh`: matched shipping-versus-resident E2E runner.
 - `tmem_allocation_probe.cu`: legal B300 TMEM allocation probe.
 - `sweep_register_caps.sh`: register-cap compilation sweep.
 - `RESULTS.md`: full four-pair ISL-1024/OSL-1024 measurements.
+- `MICROBENCH_RESULTS.md`: traffic-matched GDN kernel measurements.
 
 ## Requirements and limitations
 
@@ -85,6 +88,22 @@ python test_gdn_decode.py
 
 The measured maximum errors were `0.0001220703` for BF16 output and
 `2.384186e-07` for FP32 state.
+
+## Kernel microbenchmark
+
+Inside the same container on B300:
+
+```bash
+cd examples/experimental/persistent_gdn
+export TORCH_EXTENSIONS_DIR=/tmp/persistent_gdn_build
+export GDN_MAX_REGS=192
+export GDN_MICROBENCH_JSON=/tmp/gdn_microbench.json
+python bench_gdn_decode.py
+```
+
+The traffic-matched mode reloads the BF16 state from global memory and writes
+it back for every command. See `MICROBENCH_RESULTS.md` for the measured
+FlashInfer comparison and important interpretation caveats.
 
 ## Full E2E A/B
 
