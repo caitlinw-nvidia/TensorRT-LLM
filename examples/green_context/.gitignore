@@ -1,0 +1,6 @@
+# Copyright (c) 2026, NVIDIA CORPORATION. All rights reserved.
+
+/__pycache__/
+/greenContextTwoStreams
+/libgreen_context_pair.so
+/libnoop_kernel.so
