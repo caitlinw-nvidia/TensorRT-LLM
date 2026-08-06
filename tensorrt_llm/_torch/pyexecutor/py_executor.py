@@ -64,6 +64,8 @@ from .dwdp import DwdpManager
 from .error_classification import ErrorBudget
 from .executor_request_queue import ExecutorRequestQueue, RequestQueueItem
 from .guided_decoder import GuidedDecoder
+from .green_context import (GREEN_CONTEXT_INFO_ATTR, GREEN_CONTEXT_STREAMS_ATTR,
+                            GreenContextPair, green_context_enabled)
 from .handle_additional_outputs import HandleAdditionalOutputs
 from .handle_logits import HandleLogits
 from .hang_detector import HangDetector, propagate_hard_kill
@@ -542,6 +544,16 @@ class PyExecutor:
             enable_kv_pool_rebalance: bool = False):
         super(PyExecutor, self).__init__()
         self.device_id = torch.cuda.current_device()
+        self.green_context_pair: Optional[GreenContextPair] = None
+        if green_context_enabled():
+            self.green_context_pair = GreenContextPair.create(self.device_id)
+            info = self.green_context_pair.info
+            logger.info("[PyExecutor] green-context streams initialized: "
+                        f"device_sms={info.device_sm_count}, "
+                        f"stream_sms={info.stream_sm_counts}, "
+                        f"remainder_sms={info.remainder_sm_count}, "
+                        f"context_ids={info.context_ids}, "
+                        f"creation_time_ms={info.creation_time_ms:.3f}.")
         self.global_rank = dist.rank
         # Store the execution stream for decoder/model forward operations.
         # This stream is used for proper synchronization with
@@ -569,6 +581,11 @@ class PyExecutor:
         self.resource_manager = resource_manager
         self.scheduler = scheduler
         self.model_engine = model_engine
+        if self.green_context_pair is not None:
+            self.model_engine.model.extra_attrs[
+                GREEN_CONTEXT_STREAMS_ATTR] = self.green_context_pair.streams
+            self.model_engine.model.extra_attrs[
+                GREEN_CONTEXT_INFO_ATTR] = self.green_context_pair.info
         self._enable_dsv4_adp_dummy_fixes = getattr(
             model_engine, "_enable_dsv4_adp_dummy_fixes", False)
         self.enable_attention_dp = model_engine.enable_attention_dp
@@ -1487,6 +1504,13 @@ class PyExecutor:
         # resource managers start freeing GPU-backed workspaces.
         if torch.cuda.is_available():
             torch.cuda.synchronize()
+        if self.green_context_pair is not None:
+            self.model_engine.model.extra_attrs.pop(GREEN_CONTEXT_STREAMS_ATTR,
+                                                    None)
+            self.model_engine.model.extra_attrs.pop(GREEN_CONTEXT_INFO_ATTR,
+                                                    None)
+            self.green_context_pair.close()
+            self.green_context_pair = None
         for manager in self.resource_manager.resource_managers.values():
             if manager:
                 manager.shutdown()

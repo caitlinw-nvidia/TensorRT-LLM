@@ -21,9 +21,16 @@ between two CUDA green contexts and using their streams from PyTorch. It proves
 that a regular main stream can fork work onto two green-context streams and join
 them within one captured CUDA graph.
 
-This is not yet wired into TensorRT-LLM's production executor, model forward
-path, or CUDA graph manager. The Python programs use synthetic elementwise and
-no-op kernels, so no model checkpoint is required.
+The opt-in Python implementation in
+`tensorrt_llm/_torch/green_context.py` is wired into PyExecutor startup and
+shutdown. Set `TRTLLM_ENABLE_GREEN_CONTEXT=1` to provision two equal green
+contexts and register their streams in the model's per-forward extra attributes
+as `green_context_streams`. Enabling the flag only provisions the resources; a
+model call site must explicitly route work to the streams. This preserves the
+regular full-SM execution stream for all other kernels.
+
+The benchmark programs use synthetic elementwise and no-op kernels, so no model
+checkpoint is required.
 
 ## Components
 
@@ -38,6 +45,8 @@ no-op kernels, so no model checkpoint is required.
   streams with synthetic elementwise work.
 - `benchmark_noop_fork_join.py` isolates the graph fork/join cost by comparing
   serial, regular two-stream, and green-context two-stream no-op graphs.
+- `benchmark_executor_green_context.py` exercises the implementation owned by
+  PyExecutor and measures its context lifecycle and CUDA graph fork/join costs.
 
 ## Requirements
 
@@ -67,6 +76,7 @@ Then run the smoke tests and benchmarks:
 python test_external_stream_graph.py
 python benchmark_noop_fork_join.py
 python benchmark_external_stream_graph.py
+python benchmark_executor_green_context.py
 ```
 
 The code initializes PyTorch's CUDA primary context first; it does not call
