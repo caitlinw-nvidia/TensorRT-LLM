@@ -34,7 +34,12 @@ from ...model_config import ModelConfig
 from ...speculative import SpecMetadata
 from ...utils import EventType, get_model_extra_attrs, is_gdn_replay_enabled, is_torch_compiling
 from ..linear import FP8QDQLinearMethod, Linear, TensorParallelMode
-from ..multi_stream_utils import maybe_execute_in_parallel
+from ..multi_stream_utils import (
+    GDN_STREAM_ATTR,
+    GEMM_STREAM_ATTR,
+    maybe_execute_in_parallel,
+    maybe_execute_in_parallel_on_streams,
+)
 from .causal_conv1d import causal_conv1d_fn, causal_conv1d_update
 from .causal_conv1d_triton import causal_conv1d_update as causal_conv1d_update_triton
 from .fuse_elementwise_ops import (
@@ -171,6 +176,54 @@ def gdn_custom_op_inplace(
         attn_metadata.mamba_metadata,
         spec_metadata=spec_metadata,
         output=output[:, :num_tokens, :, :],
+    )
+
+
+@torch.library.custom_op("trtllm::gdn_z_gemm_overlap_inplace",
+                         mutates_args=("attn_output", "z_output"))
+def gdn_z_gemm_overlap_inplace(
+    mixed_qkv: torch.Tensor,
+    a: torch.Tensor,
+    b: torch.Tensor,
+    hidden_states: torch.Tensor,
+    layer_idx: str,
+    attn_output: torch.Tensor,
+    z_output: torch.Tensor,
+) -> None:
+    """Run GDN and the independent Z projection on executor-owned streams.
+
+    Keeping the stream/event operations behind a custom op makes the explicit
+    fork/join opaque to torch.compile while still allowing CUDA graph capture
+    to record both auxiliary-stream branches.
+    """
+    attn_metadata, gdn_layer, spec_metadata = _extract_gdn_extra_attrs(
+        layer_idx)
+    extra_attrs = get_model_extra_attrs()
+    assert extra_attrs is not None
+    num_tokens = attn_metadata.num_tokens
+
+    def _run_gdn():
+        return gdn_layer.forward_core(
+            mixed_qkv[:num_tokens],
+            a[:num_tokens],
+            b[:num_tokens],
+            attn_metadata,
+            attn_metadata.mamba_metadata,
+            spec_metadata=spec_metadata,
+            output=attn_output[:, :num_tokens, :, :],
+        )
+
+    def _run_z_gemm():
+        return gdn_layer._project_z(hidden_states, output=z_output)
+
+    maybe_execute_in_parallel_on_streams(
+        _run_gdn,
+        _run_z_gemm,
+        gdn_layer.gdn_gemm_events[0],
+        gdn_layer.gdn_gemm_events[1],
+        gdn_layer.gdn_gemm_events[2],
+        extra_attrs.get(GDN_STREAM_ATTR),
+        extra_attrs.get(GEMM_STREAM_ATTR),
     )
 
 
@@ -394,6 +447,10 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         )
 
         self.event_dict = {key: torch.cuda.Event() for key in [EventType.Main, EventType.Attention]}
+        # fork, GDN-done, and GEMM-done events for the executor-owned
+        # three-stream path. Events are created before CUDA graph warmup so
+        # capture does not trigger lazy event allocation.
+        self.gdn_gemm_events = [torch.cuda.Event() for _ in range(3)]
         self.aux_stream = aux_stream
 
     def cache_derived_state(self) -> None:
@@ -409,8 +466,61 @@ class Qwen3NextGatedDeltaNet(nn.Module):
     def post_load_weights(self) -> None:
         self.cache_derived_state()
 
-    def _compute_tokenwise_inputs(self, hidden_states: torch.Tensor):
+    def _can_split_qkvz_projection(self) -> bool:
+        """Whether the fused QKVZ weight can be used as two BF16/FP16 GEMMs.
+
+        Quantized Linear methods carry scale/packing state that cannot be
+        represented by a plain row slice. Those configurations retain the
+        established fused projection path.
+        """
+        return (hasattr(self.in_proj_qkvz, "weight")
+                and not self.in_proj_qkvz.has_any_quant
+                and self.in_proj_qkvz.weight.dtype in (torch.float16,
+                                                       torch.bfloat16)
+                and not self.in_proj_qkvz.use_custom_cublas_mm
+                and not self.in_proj_qkvz.use_cute_dsl_bf16_gemm
+                and self.in_proj_qkvz.lora is None)
+
+    def _executor_overlap_streams(self):
+        extra_attrs = get_model_extra_attrs()
+        if extra_attrs is None:
+            return None, None
+        return (
+            extra_attrs.get(GDN_STREAM_ATTR),
+            extra_attrs.get(GEMM_STREAM_ATTR),
+        )
+
+    def _project_qkv(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return torch.nn.functional.linear(
+            hidden_states, self.in_proj_qkvz.weight[:self.conv_dim_per_tp])
+
+    def _project_z(self,
+                   hidden_states: torch.Tensor,
+                   output: Optional[torch.Tensor] = None) -> torch.Tensor:
+        weight = self.in_proj_qkvz.weight[self.conv_dim_per_tp:]
+        output_shape = (
+            *hidden_states.shape[:-1],
+            self.num_v_heads_per_tp,
+            self.head_v_dim,
+        )
+        if output is None:
+            return torch.nn.functional.linear(hidden_states,
+                                              weight).view(output_shape)
+
+        torch.mm(
+            hidden_states.reshape(-1, hidden_states.shape[-1]),
+            weight.t(),
+            out=output.view(-1, self.value_dim_per_tp),
+        )
+        return output.view(output_shape)
+
+    def _compute_tokenwise_inputs(self,
+                                  hidden_states: torch.Tensor,
+                                  split_z: bool = False):
+
         def _compute_projected_states_qkvz():
+            if split_z:
+                return self._project_qkv(hidden_states)
             return self.in_proj_qkvz(hidden_states)
 
         def _compute_projected_states_ba():
@@ -425,19 +535,19 @@ class Qwen3NextGatedDeltaNet(nn.Module):
             disable_on_compile=True,
         )
 
-        # The weight mapper reorders in_proj rows into the dense per-rank
-        # layouts [Q|K|V|Z] and [b|a] (see grouped_to_dense_in_proj_qkvz_perm),
-        # so every component is a plain column slice of the projection —
-        # no split/reshape kernel. Downstream consumers (causal_conv1d,
-        # the GDN decode kernels, the gated norm) read these row-strided
-        # views in place.
+        # The mapper stores each local shard as [Q|K|V|Z]. In overlap mode
+        # projected_states_qkvz contains only [Q|K|V]; otherwise preserve the
+        # established fused projection and return Z as its trailing view.
         num_tokens = projected_states_qkvz.shape[0]
-        mixed_qkv = projected_states_qkvz[:, : self.conv_dim_per_tp]
-        z = projected_states_qkvz[:, self.conv_dim_per_tp :].view(
-            num_tokens, self.num_v_heads_per_tp, self.head_v_dim
-        )
-        b = projected_states_ba[:, : self.num_v_heads_per_tp]
-        a = projected_states_ba[:, self.num_v_heads_per_tp :]
+        if split_z:
+            mixed_qkv = projected_states_qkvz
+            z = None
+        else:
+            mixed_qkv = projected_states_qkvz[:, :self.conv_dim_per_tp]
+            z = projected_states_qkvz[:, self.conv_dim_per_tp:].view(
+                num_tokens, self.num_v_heads_per_tp, self.head_v_dim)
+        b = projected_states_ba[:, :self.num_v_heads_per_tp]
+        a = projected_states_ba[:, self.num_v_heads_per_tp:]
 
         return mixed_qkv, z, a, b
 
@@ -1051,13 +1161,62 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         spec_metadata: Optional[SpecMetadata] = None,
         all_reduce_params: Optional[AllReduceParams] = None,
     ):
-        mixed_qkv, z, a, b = self._compute_tokenwise_inputs(hidden_states)
+        gdn_stream, gemm_stream = self._executor_overlap_streams()
+        use_gdn_gemm_overlap = (gdn_stream is not None
+                                and gemm_stream is not None
+                                and self._can_split_qkvz_projection())
+        mixed_qkv, z, a, b = self._compute_tokenwise_inputs(
+            hidden_states, split_z=use_gdn_gemm_overlap)
 
-        if self.register_to_config and is_torch_compiling():
+        if use_gdn_gemm_overlap and self.register_to_config and is_torch_compiling(
+        ):
             attn_out = mixed_qkv.new_empty(
-                (1, mixed_qkv.shape[0], self.num_v_heads_per_tp, self.head_v_dim)
+                (1, mixed_qkv.shape[0], self.num_v_heads_per_tp,
+                 self.head_v_dim))
+            z = hidden_states.new_empty((
+                *hidden_states.shape[:-1],
+                self.num_v_heads_per_tp,
+                self.head_v_dim,
+            ))
+            gdn_z_gemm_overlap_inplace(
+                mixed_qkv,
+                a,
+                b,
+                hidden_states,
+                self.layer_idx_str,
+                attn_out,
+                z,
             )
+        elif self.register_to_config and is_torch_compiling():
+            attn_out = mixed_qkv.new_empty(
+                (1, mixed_qkv.shape[0], self.num_v_heads_per_tp,
+                 self.head_v_dim))
             gdn_custom_op_inplace(mixed_qkv, a, b, self.layer_idx_str, attn_out)
+        elif use_gdn_gemm_overlap:
+
+            def _run_gdn():
+                return self.forward_core(
+                    mixed_qkv,
+                    a,
+                    b,
+                    attn_metadata,
+                    mamba_metadata,
+                    spec_metadata=spec_metadata,
+                )
+
+            def _run_z_gemm():
+                return self._project_z(hidden_states)
+
+            attn_out, z = maybe_execute_in_parallel_on_streams(
+                _run_gdn,
+                _run_z_gemm,
+                self.gdn_gemm_events[0],
+                self.gdn_gemm_events[1],
+                self.gdn_gemm_events[2],
+                gdn_stream,
+                gemm_stream,
+                disable_on_compile=True,
+            )
         else:
             attn_out = self.forward_core(
                 mixed_qkv,

@@ -55,6 +55,7 @@ from ..models.modeling_multimodal_mixin import \
     maybe_prefetch_mm_encoder_for_next_iter
 from ..models.modeling_utils import DecoderModelForCausalLM
 from ..modules.decoder_layer import DecoderLayer
+from ..modules.multi_stream_utils import (GDN_STREAM_ATTR, GEMM_STREAM_ATTR)
 from ..speculative.drafter import Drafter
 from ..speculative.spec_sampler_base import SampleStateTensorsSpec
 from ..speculative.speculation_gate import SpeculationGate
@@ -549,6 +550,13 @@ class PyExecutor:
         # create_py_executor. Create a new stream if none provided.
         self.execution_stream = execution_stream if execution_stream is not None else torch.cuda.Stream(
         )
+        # The main execution stream owns the layer launch order. GDN and its
+        # independent GEMM branch use executor-owned auxiliary streams so the
+        # same stream objects remain alive across CUDA graph capture/replay.
+        # These are ordinary CUDA streams; no green contexts or SM partitions
+        # are created here.
+        self.gdn_stream = torch.cuda.Stream()
+        self.gemm_stream = torch.cuda.Stream()
         # Encoder-decoder requests use a dedicated encoder stream so the
         # encoder forward does not serialize the decoder forward when the
         # two operate on disjoint request sets. Per-request CUDA events
@@ -556,6 +564,8 @@ class PyExecutor:
         self.encoder_stream = torch.cuda.Stream()
         logger.info(
             f"[PyExecutor] execution_stream initialized: {self.execution_stream}; "
+            f"gdn_stream initialized: {self.gdn_stream}; "
+            f"gemm_stream initialized: {self.gemm_stream}; "
             f"encoder_stream initialized: {self.encoder_stream}.")
 
         self.peft_cache_config = peft_cache_config
@@ -569,6 +579,8 @@ class PyExecutor:
         self.resource_manager = resource_manager
         self.scheduler = scheduler
         self.model_engine = model_engine
+        self.model_engine.model.extra_attrs[GDN_STREAM_ATTR] = self.gdn_stream
+        self.model_engine.model.extra_attrs[GEMM_STREAM_ATTR] = self.gemm_stream
         self._enable_dsv4_adp_dummy_fixes = getattr(
             model_engine, "_enable_dsv4_adp_dummy_fixes", False)
         self.enable_attention_dp = model_engine.enable_attention_dp
@@ -1487,6 +1499,8 @@ class PyExecutor:
         # resource managers start freeing GPU-backed workspaces.
         if torch.cuda.is_available():
             torch.cuda.synchronize()
+        self.model_engine.model.extra_attrs.pop(GDN_STREAM_ATTR, None)
+        self.model_engine.model.extra_attrs.pop(GEMM_STREAM_ATTR, None)
         for manager in self.resource_manager.resource_managers.values():
             if manager:
                 manager.shutdown()

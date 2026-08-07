@@ -151,6 +151,58 @@ def test_in_proj_perm_quantized_dtypes():
     assert torch.equal(lhs, rhs)
 
 
+@skip_no_cuda
+def test_split_qkvz_projection_matches_fused_bf16():
+    """The runtime QKV/Z row split must preserve the fused projection."""
+    from tensorrt_llm._torch.modules.mamba.gdn_mixer import Qwen3NextGatedDeltaNet
+
+    torch.manual_seed(42)
+    num_tokens = 17
+    hidden_size = 256
+    num_v_heads = 8
+    head_v_dim = 64
+    value_dim = num_v_heads * head_v_dim
+    conv_dim = 768
+
+    layer = Qwen3NextGatedDeltaNet.__new__(Qwen3NextGatedDeltaNet)
+    torch.nn.Module.__init__(layer)
+    layer.conv_dim_per_tp = conv_dim
+    layer.value_dim_per_tp = value_dim
+    layer.num_v_heads_per_tp = num_v_heads
+    layer.head_v_dim = head_v_dim
+    layer.in_proj_qkvz = SimpleNamespace(weight=torch.randn(
+        conv_dim + value_dim,
+        hidden_size,
+        dtype=torch.bfloat16,
+        device="cuda",
+    ))
+    hidden_states = torch.randn(num_tokens,
+                                hidden_size,
+                                dtype=torch.bfloat16,
+                                device="cuda")
+
+    fused = F.linear(hidden_states, layer.in_proj_qkvz.weight)
+    qkv = layer._project_qkv(hidden_states)
+    z = layer._project_z(hidden_states)
+
+    torch.testing.assert_close(qkv, fused[:, :conv_dim], rtol=1e-2, atol=1e-2)
+    torch.testing.assert_close(
+        z.reshape(num_tokens, value_dim),
+        fused[:, conv_dim:],
+        rtol=1e-2,
+        atol=1e-2,
+    )
+    z_out = torch.empty_like(z)
+    z_written = layer._project_z(hidden_states, output=z_out)
+    assert z_written.data_ptr() == z_out.data_ptr()
+    torch.testing.assert_close(
+        z_written.reshape(num_tokens, value_dim),
+        fused[:, conv_dim:],
+        rtol=1e-2,
+        atol=1e-2,
+    )
+
+
 # ---- Tests for the multi-row gated RMSNorm ----
 
 

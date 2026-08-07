@@ -4,6 +4,9 @@ from typing import Any, Callable, Optional
 
 import torch
 
+GDN_STREAM_ATTR = "gdn_stream"
+GEMM_STREAM_ATTR = "gemm_stream"
+
 
 class do_multi_stream_local(threading.local):
 
@@ -79,3 +82,47 @@ def maybe_execute_in_parallel(
         result0 = fn0()
         result1 = fn1()
     return (result0, result1)
+
+
+def maybe_execute_in_parallel_on_streams(
+        fn0: Callable,
+        fn1: Callable,
+        fork_event: torch.cuda.Event,
+        event0: torch.cuda.Event,
+        event1: torch.cuda.Event,
+        stream0: Optional[torch.cuda.Stream] = None,
+        stream1: Optional[torch.cuda.Stream] = None,
+        disable_on_compile: bool = False) -> tuple[Any, Any]:
+    """Run two independent functions on two explicitly supplied CUDA streams.
+
+    The current stream is the parent stream. It records ``fork_event`` before
+    either branch starts and waits for both completion events before returning.
+    The fork/join is therefore safe to capture in a CUDA graph, provided both
+    branch streams belong to the same CUDA context as the capture stream.
+
+    As with :func:`maybe_execute_in_parallel`, eager execution remains
+    sequential unless ``with_multi_stream(True)`` is active. TRT-LLM enables
+    that context during CUDA graph warmup and capture.
+    """
+
+    multi_stream = (do_multi_stream() and stream0 is not None
+                    and stream1 is not None and
+                    not (disable_on_compile and torch.compiler.is_compiling()))
+
+    if not multi_stream:
+        return fn0(), fn1()
+
+    fork_event.record()
+    with torch.cuda.stream(stream0):
+        fork_event.wait()
+        result0 = fn0()
+        event0.record()
+
+    with torch.cuda.stream(stream1):
+        fork_event.wait()
+        result1 = fn1()
+        event1.record()
+
+    event0.wait()
+    event1.wait()
+    return result0, result1
