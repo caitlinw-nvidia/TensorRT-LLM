@@ -45,6 +45,39 @@ from .model_loader import ModelLoader, _construct_checkpoint_loader
 from .py_executor import PyExecutor
 
 
+_GREEN_CONTEXT_SM_COUNT_ENV = "TRTLLM_GREEN_CONTEXT_SM_COUNT"
+
+
+def _create_execution_stream():
+    requested_sm_count = os.environ.get(_GREEN_CONTEXT_SM_COUNT_ENV)
+    if requested_sm_count is None:
+        return None, torch.cuda.Stream()
+
+    try:
+        sm_count = int(requested_sm_count)
+    except ValueError as error:
+        raise ValueError(
+            f"{_GREEN_CONTEXT_SM_COUNT_ENV} must be a positive integer, got "
+            f"{requested_sm_count!r}") from error
+    if sm_count <= 0:
+        raise ValueError(
+            f"{_GREEN_CONTEXT_SM_COUNT_ENV} must be a positive integer, got "
+            f"{requested_sm_count!r}")
+
+    from tensorrt_llm.bindings.internal.runtime import GreenContext
+
+    device = torch.cuda.current_device()
+    green_context = GreenContext(device=device, sm_count=sm_count)
+    execution_stream = torch.cuda.ExternalStream(green_context.stream_ptr,
+                                                 device=device)
+    logger.info(
+        f"Created PyExecutor green-context stream on device {device}: "
+        f"requested_sm_count={green_context.requested_sm_count} "
+        f"allocated_sm_count={green_context.allocated_sm_count} "
+        f"stream={execution_stream}")
+    return green_context, execution_stream
+
+
 class _ExecutorMemoryMonitor:
     """Currently this focuses on tracking memory usage and related errors."""
 
@@ -815,7 +848,7 @@ def create_py_executor(
 
     # Create the execution stream for model forward operations
     # for proper synchronization with KVCacheTransferManager's onboard/offload operations.
-    execution_stream = torch.cuda.Stream()
+    green_context, execution_stream = _create_execution_stream()
     logger.info(
         f"[create_py_executor] Created execution_stream: {execution_stream}")
 
@@ -1017,6 +1050,9 @@ def create_py_executor(
     if mapping.rank == 0:
         logger.info(f"LLM Args:\n{llm_args}")
 
+    # torch.cuda.ExternalStream does not own the underlying CUstream. Keep the
+    # green-context RAII object alive for at least as long as PyExecutor.
+    py_executor._green_context = green_context
     py_executor.start_worker()
 
     return py_executor

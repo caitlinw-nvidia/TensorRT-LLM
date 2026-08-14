@@ -36,6 +36,7 @@ set(SRCS
     gptDecoder.cpp
     gptDecoderBatched.cpp
     gptJsonConfig.cpp
+    greenContext.cpp
     iBuffer.cpp
     iTensor.cpp
     ipcUtils.cpp

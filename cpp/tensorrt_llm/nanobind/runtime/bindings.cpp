@@ -31,6 +31,7 @@
 #include "tensorrt_llm/runtime/decodingOutput.h"
 #include "tensorrt_llm/runtime/gptDecoder.h"
 #include "tensorrt_llm/runtime/gptDecoderBatched.h"
+#include "tensorrt_llm/runtime/greenContext.h"
 #include "tensorrt_llm/runtime/iBuffer.h"
 #include "tensorrt_llm/runtime/iGptDecoderBatched.h"
 #include "tensorrt_llm/runtime/iTensor.h"
@@ -103,6 +104,15 @@ namespace tensorrt_llm::nanobind::runtime
 
 void initBindings(nb::module_& m)
 {
+
+    nb::class_<tr::GreenContext>(m, "GreenContext")
+        .def(nb::init<int, unsigned int>(), nb::arg("device"), nb::arg("sm_count"),
+            nb::call_guard<nb::gil_scoped_release>())
+        .def_prop_ro("stream_ptr", &tr::GreenContext::getStreamPtr)
+        .def_prop_ro("device", &tr::GreenContext::getDevice)
+        .def_prop_ro("requested_sm_count", &tr::GreenContext::getRequestedSmCount)
+        .def_prop_ro("allocated_sm_count", &tr::GreenContext::getAllocatedSmCount)
+        .def("synchronize", &tr::GreenContext::synchronize, nb::call_guard<nb::gil_scoped_release>());
 
     nb::class_<tr::LoraCache::TaskLayerModuleConfig>(m, "TaskLayerModuleConfig")
         .def(nb::init<>())
