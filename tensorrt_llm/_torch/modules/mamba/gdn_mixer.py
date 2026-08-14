@@ -30,6 +30,8 @@ from tensorrt_llm.mapping import Mapping
 
 from ...attention_backend import AttentionMetadata
 from ...distributed import AllReduceParams
+from ...green_context import (GDN_GREEN_CONTEXT_POOL_ATTR,
+                              GdnGreenContextWorkload, GreenContextPool)
 from ...model_config import ModelConfig
 from ...speculative import SpecMetadata
 from ...utils import EventType, get_model_extra_attrs, is_gdn_replay_enabled, is_torch_compiling
@@ -198,9 +200,9 @@ def gdn_z_gemm_overlap_inplace(
     """
     attn_metadata, gdn_layer, spec_metadata = _extract_gdn_extra_attrs(
         layer_idx)
-    extra_attrs = get_model_extra_attrs()
-    assert extra_attrs is not None
     num_tokens = attn_metadata.num_tokens
+    gdn_stream, gemm_stream = gdn_layer._executor_overlap_streams(
+        hidden_states, attn_metadata)
 
     def _run_gdn():
         return gdn_layer.forward_core(
@@ -222,8 +224,8 @@ def gdn_z_gemm_overlap_inplace(
         gdn_layer.gdn_gemm_events[0],
         gdn_layer.gdn_gemm_events[1],
         gdn_layer.gdn_gemm_events[2],
-        extra_attrs.get(GDN_STREAM_ATTR),
-        extra_attrs.get(GEMM_STREAM_ATTR),
+        gdn_stream,
+        gemm_stream,
     )
 
 
@@ -481,10 +483,40 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 and not self.in_proj_qkvz.use_cute_dsl_bf16_gemm
                 and self.in_proj_qkvz.lora is None)
 
-    def _executor_overlap_streams(self):
+    def _executor_overlap_configured(self) -> bool:
+        """Whether the executor configured fixed or heuristic streams."""
+        extra_attrs = get_model_extra_attrs()
+        if extra_attrs is None:
+            return False
+        if extra_attrs.get(GDN_GREEN_CONTEXT_POOL_ATTR) is not None:
+            return True
+        return (extra_attrs.get(GDN_STREAM_ATTR) is not None
+                and extra_attrs.get(GEMM_STREAM_ATTR) is not None)
+
+    def _executor_overlap_streams(
+            self, hidden_states: torch.Tensor,
+            attn_metadata: AttentionMetadata):
+        """Select capture-stable streams for the current decode shape."""
         extra_attrs = get_model_extra_attrs()
         if extra_attrs is None:
             return None, None
+        green_context_pool = extra_attrs.get(GDN_GREEN_CONTEXT_POOL_ATTR)
+        if green_context_pool is not None:
+            assert isinstance(green_context_pool, GreenContextPool)
+            num_tokens = hidden_states.numel() // hidden_states.shape[-1]
+            layer_cache = attn_metadata.kv_cache_manager.mamba_layer_cache(
+                self.layer_idx)
+            workload = GdnGreenContextWorkload(
+                batch_size=attn_metadata.num_seqs,
+                num_tokens=num_tokens,
+                num_v_heads=self.num_v_heads_per_tp,
+                head_size=self.head_v_dim,
+                hidden_size=hidden_states.shape[-1],
+                key_head_size=self.head_k_dim,
+                gemm_element_bytes=self.in_proj_qkvz.weight.element_size(),
+                state_element_bytes=layer_cache.temporal.element_size(),
+            )
+            return green_context_pool.get_streams(workload)
         return (
             extra_attrs.get(GDN_STREAM_ATTR),
             extra_attrs.get(GEMM_STREAM_ATTR),
@@ -1161,9 +1193,7 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         spec_metadata: Optional[SpecMetadata] = None,
         all_reduce_params: Optional[AllReduceParams] = None,
     ):
-        gdn_stream, gemm_stream = self._executor_overlap_streams()
-        use_gdn_gemm_overlap = (gdn_stream is not None
-                                and gemm_stream is not None
+        use_gdn_gemm_overlap = (self._executor_overlap_configured()
                                 and self._can_split_qkvz_projection())
         mixed_qkv, z, a, b = self._compute_tokenwise_inputs(
             hidden_states, split_z=use_gdn_gemm_overlap)
@@ -1193,6 +1223,8 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                  self.head_v_dim))
             gdn_custom_op_inplace(mixed_qkv, a, b, self.layer_idx_str, attn_out)
         elif use_gdn_gemm_overlap:
+            gdn_stream, gemm_stream = self._executor_overlap_streams(
+                hidden_states, attn_metadata)
 
             def _run_gdn():
                 return self.forward_core(

@@ -50,6 +50,8 @@ from tensorrt_llm.tools.profiler.host_profile_tools.host_profiler import (
 from ..distributed import Distributed
 from ..distributed.communicator import ReduceOp
 from ..expert_statistic import ExpertStatistic
+from ..green_context import (GDN_GREEN_CONTEXT_POOL_ATTR, GreenContextPool,
+                             green_context_enabled)
 from ..models.modeling_llama import Llama4ForConditionalGeneration
 from ..models.modeling_multimodal_mixin import \
     maybe_prefetch_mm_encoder_for_next_iter
@@ -553,10 +555,18 @@ class PyExecutor:
         # The main execution stream owns the layer launch order. GDN and its
         # independent GEMM branch use executor-owned auxiliary streams so the
         # same stream objects remain alive across CUDA graph capture/replay.
-        # These are ordinary CUDA streams; no green contexts or SM partitions
-        # are created here.
-        self.gdn_stream = torch.cuda.Stream()
-        self.gemm_stream = torch.cuda.Stream()
+        self.green_context_pool: Optional[GreenContextPool] = None
+        if green_context_enabled():
+            self.green_context_pool = GreenContextPool(self.device_id)
+            self.gdn_stream = None
+            self.gemm_stream = None
+            logger.info(
+                "[PyExecutor] GDN green-context heuristic initialized: "
+                f"device_sms={self.green_context_pool.device_sm_count}, "
+                "stream pairs will be cached by CUDA-graph batch shape.")
+        else:
+            self.gdn_stream = torch.cuda.Stream()
+            self.gemm_stream = torch.cuda.Stream()
         # Encoder-decoder requests use a dedicated encoder stream so the
         # encoder forward does not serialize the decoder forward when the
         # two operate on disjoint request sets. Per-request CUDA events
@@ -581,6 +591,9 @@ class PyExecutor:
         self.model_engine = model_engine
         self.model_engine.model.extra_attrs[GDN_STREAM_ATTR] = self.gdn_stream
         self.model_engine.model.extra_attrs[GEMM_STREAM_ATTR] = self.gemm_stream
+        if self.green_context_pool is not None:
+            self.model_engine.model.extra_attrs[
+                GDN_GREEN_CONTEXT_POOL_ATTR] = self.green_context_pool
         self._enable_dsv4_adp_dummy_fixes = getattr(
             model_engine, "_enable_dsv4_adp_dummy_fixes", False)
         self.enable_attention_dp = model_engine.enable_attention_dp
@@ -1501,6 +1514,11 @@ class PyExecutor:
             torch.cuda.synchronize()
         self.model_engine.model.extra_attrs.pop(GDN_STREAM_ATTR, None)
         self.model_engine.model.extra_attrs.pop(GEMM_STREAM_ATTR, None)
+        self.model_engine.model.extra_attrs.pop(GDN_GREEN_CONTEXT_POOL_ATTR,
+                                                None)
+        if self.green_context_pool is not None:
+            self.green_context_pool.close()
+            self.green_context_pool = None
         for manager in self.resource_manager.resource_managers.values():
             if manager:
                 manager.shutdown()

@@ -97,8 +97,8 @@ def maybe_execute_in_parallel_on_streams(
 
     The current stream is the parent stream. It records ``fork_event`` before
     either branch starts and waits for both completion events before returning.
-    The fork/join is therefore safe to capture in a CUDA graph, provided both
-    branch streams belong to the same CUDA context as the capture stream.
+    The fork/join is safe to capture in a CUDA graph with ordinary streams or
+    green-context streams from the same device.
 
     As with :func:`maybe_execute_in_parallel`, eager execution remains
     sequential unless ``with_multi_stream(True)`` is active. TRT-LLM enables
@@ -112,7 +112,8 @@ def maybe_execute_in_parallel_on_streams(
     if not multi_stream:
         return fn0(), fn1()
 
-    fork_event.record()
+    parent_stream = torch.cuda.current_stream()
+    fork_event.record(parent_stream)
     with torch.cuda.stream(stream0):
         fork_event.wait()
         result0 = fn0()
@@ -123,6 +124,6 @@ def maybe_execute_in_parallel_on_streams(
         result1 = fn1()
         event1.record()
 
-    event0.wait()
-    event1.wait()
+    parent_stream.wait_event(event0)
+    parent_stream.wait_event(event1)
     return result0, result1
