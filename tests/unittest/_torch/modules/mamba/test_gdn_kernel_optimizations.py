@@ -188,3 +188,35 @@ def test_transpose_and_split_qkv(
     torch.testing.assert_close(q_out.view(total_seq, -1), q_ref, rtol=0, atol=0)
     torch.testing.assert_close(k_out.view(total_seq, -1), k_ref, rtol=0, atol=0)
     torch.testing.assert_close(v_out.view(total_seq, -1), v_ref, rtol=0, atol=0)
+
+
+@skip_no_cuda
+def test_gdn_recurrence_runs_on_configured_stream():
+    """The recurrence callable runs on its configured stream and rejoins its parent."""
+    from tensorrt_llm._torch.modules.mamba.gdn_mixer import _execute_on_stream
+
+    device = torch.cuda.current_device()
+    parent_stream = torch.cuda.Stream(device=device)
+    recurrence_stream = torch.cuda.Stream(device=device)
+    fork_event = torch.cuda.Event()
+    done_event = torch.cuda.Event()
+    observed_streams = []
+
+    with torch.cuda.stream(parent_stream):
+        source = torch.arange(32, dtype=torch.float32, device="cuda")
+
+        def recurrence():
+            observed_streams.append(torch.cuda.current_stream().cuda_stream)
+            return source + 1
+
+        recurrence_output = _execute_on_stream(
+            recurrence,
+            recurrence_stream,
+            fork_event,
+            done_event,
+        )
+        output = recurrence_output * 2
+
+    parent_stream.synchronize()
+    assert observed_streams == [recurrence_stream.cuda_stream]
+    torch.testing.assert_close(output, (source + 1) * 2)

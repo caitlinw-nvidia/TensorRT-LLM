@@ -44,14 +44,13 @@ from .model_engine import PyTorchModelEngine
 from .model_loader import ModelLoader, _construct_checkpoint_loader
 from .py_executor import PyExecutor
 
-
 _GREEN_CONTEXT_SM_COUNT_ENV = "TRTLLM_GREEN_CONTEXT_SM_COUNT"
 
 
-def _create_execution_stream():
+def _create_gdn_recurrence_stream():
     requested_sm_count = os.environ.get(_GREEN_CONTEXT_SM_COUNT_ENV)
     if requested_sm_count is None:
-        return None, torch.cuda.Stream()
+        return None, None
 
     try:
         sm_count = int(requested_sm_count)
@@ -68,14 +67,14 @@ def _create_execution_stream():
 
     device = torch.cuda.current_device()
     green_context = GreenContext(device=device, sm_count=sm_count)
-    execution_stream = torch.cuda.ExternalStream(green_context.stream_ptr,
-                                                 device=device)
+    recurrence_stream = torch.cuda.ExternalStream(green_context.stream_ptr,
+                                                  device=device)
     logger.info(
-        f"Created PyExecutor green-context stream on device {device}: "
+        f"Created GDN recurrence green-context stream on device {device}: "
         f"requested_sm_count={green_context.requested_sm_count} "
         f"allocated_sm_count={green_context.allocated_sm_count} "
-        f"stream={execution_stream}")
-    return green_context, execution_stream
+        f"stream={recurrence_stream}")
+    return green_context, recurrence_stream
 
 
 class _ExecutorMemoryMonitor:
@@ -846,9 +845,26 @@ def create_py_executor(
     estimating_kv_cache = False
     kv_cache_creator = None
 
-    # Create the execution stream for model forward operations
-    # for proper synchronization with KVCacheTransferManager's onboard/offload operations.
-    green_context, execution_stream = _create_execution_stream()
+    # Keep the model forward on a regular stream. Only the GDN recurrent
+    # update kernels are routed to the opt-in green-context stream.
+    execution_stream = torch.cuda.Stream()
+    green_context, gdn_recurrence_stream = _create_gdn_recurrence_stream()
+    if gdn_recurrence_stream is not None:
+        from ..modules.mamba.gdn_mixer import configure_gdn_recurrence_stream
+
+        configured_layers = configure_gdn_recurrence_stream(
+            model_engine.model,
+            gdn_recurrence_stream,
+            execution_stream,
+        )
+        if draft_model_engine is not None:
+            configured_layers += configure_gdn_recurrence_stream(
+                draft_model_engine.model,
+                gdn_recurrence_stream,
+                execution_stream,
+            )
+        logger.info(f"Configured {configured_layers} GDN layers to use the "
+                    "green-context recurrence stream")
     logger.info(
         f"[create_py_executor] Created execution_stream: {execution_stream}")
 
@@ -1052,7 +1068,7 @@ def create_py_executor(
 
     # torch.cuda.ExternalStream does not own the underlying CUstream. Keep the
     # green-context RAII object alive for at least as long as PyExecutor.
-    py_executor._green_context = green_context
+    py_executor._gdn_green_context = green_context
     py_executor.start_worker()
 
     return py_executor

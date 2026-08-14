@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: Apache-2.0
 
 import os
-from typing import Optional
+from typing import Callable, Optional
 
 import torch
 import triton
@@ -41,6 +41,30 @@ from .fuse_elementwise_ops import (
 )
 from .layernorm_gated import RMSNorm as RMSNormGated
 from .mamba2_metadata import Mamba2Metadata
+
+
+@torch.compiler.disable
+def _execute_on_stream(
+    fn: Callable[[], torch.Tensor],
+    stream: Optional[torch.cuda.Stream],
+    fork_event: Optional[torch.cuda.Event],
+    done_event: Optional[torch.cuda.Event],
+) -> torch.Tensor:
+    """Execute one tensor-producing operation on an optional CUDA stream."""
+    if stream is None:
+        return fn()
+    if fork_event is None or done_event is None:
+        raise RuntimeError("GDN recurrence stream events are not configured")
+
+    parent_stream = torch.cuda.current_stream()
+    fork_event.record(parent_stream)
+    with torch.cuda.stream(stream):
+        stream.wait_event(fork_event)
+        result = fn()
+        done_event.record(stream)
+    parent_stream.wait_event(done_event)
+    result.record_stream(parent_stream)
+    return result
 
 
 def ensure_divisibility(numerator, denominator):
@@ -418,6 +442,43 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         self.event_dict = {key: torch.cuda.Event() for key in [EventType.Main, EventType.Attention]}
         self.aux_stream = aux_stream
+        self.gdn_recurrence_stream: Optional[torch.cuda.Stream] = None
+        self.gdn_recurrence_fork_event: Optional[torch.cuda.Event] = None
+        self.gdn_recurrence_done_event: Optional[torch.cuda.Event] = None
+
+    def set_gdn_recurrence_stream(
+        self,
+        recurrence_stream: torch.cuda.Stream,
+        parent_stream: torch.cuda.Stream,
+    ) -> None:
+        """Route recurrent updates to ``recurrence_stream``.
+
+        Materialize the cross-stream events before CUDA graph capture. The
+        caller synchronizes ``parent_stream`` after configuring every layer.
+        """
+        self.gdn_recurrence_stream = recurrence_stream
+        self.gdn_recurrence_fork_event = torch.cuda.Event()
+        self.gdn_recurrence_done_event = torch.cuda.Event()
+
+        with torch.cuda.stream(parent_stream):
+            self.gdn_recurrence_fork_event.record()
+        with torch.cuda.stream(recurrence_stream):
+            recurrence_stream.wait_event(self.gdn_recurrence_fork_event)
+            self.gdn_recurrence_done_event.record()
+        parent_stream.wait_event(self.gdn_recurrence_done_event)
+
+    def _run_gdn_recurrence(
+        self,
+        fn: Callable[[], torch.Tensor],
+    ) -> torch.Tensor:
+        if self.gdn_recurrence_stream is None:
+            return fn()
+        return _execute_on_stream(
+            fn,
+            self.gdn_recurrence_stream,
+            self.gdn_recurrence_fork_event,
+            self.gdn_recurrence_done_event,
+        )
 
     def fix_query_key_value_ordering(self, mixed_qkvz, mixed_ba):
         """
@@ -561,18 +622,20 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 num_decodes, dtype=torch.int32, device=cache_indices.device
             )
 
-            return fused_recurrent_gated_delta_rule_update(
-                q=query,
-                k=key,
-                v=value,
-                g=g,
-                beta=beta,
-                initial_state_source=recurrent_state_source,
-                initial_state_indices=recurrent_state_indices,
-                use_qk_l2norm_in_kernel=True,
-                disable_state_update=True,
-                intermediate_states_buffer=intermediate_ssm_states,
-                cache_steps=draft_token_num,
+            return self._run_gdn_recurrence(
+                lambda: fused_recurrent_gated_delta_rule_update(
+                    q=query,
+                    k=key,
+                    v=value,
+                    g=g,
+                    beta=beta,
+                    initial_state_source=recurrent_state_source,
+                    initial_state_indices=recurrent_state_indices,
+                    use_qk_l2norm_in_kernel=True,
+                    disable_state_update=True,
+                    intermediate_states_buffer=intermediate_ssm_states,
+                    cache_steps=draft_token_num,
+                )
             )
 
         mixed_qkv = causal_conv1d_update(
@@ -594,20 +657,22 @@ class Qwen3NextGatedDeltaNet(nn.Module):
         key = key.view(1, seq_len, self.num_k_heads_per_tp, self.head_k_dim)
         value = value.view(1, seq_len, self.num_v_heads_per_tp, self.head_v_dim)
 
-        core_attn_out = fused_sigmoid_gating_delta_rule_update(
-            A_log=self.A_log,
-            dt_bias=self.dt_bias,
-            q=query,
-            k=key,
-            v=value,
-            a=a,
-            b=b,
-            initial_state_source=ssm_states,
-            initial_state_indices=cache_indices,
-            cu_seqlens=query_start_loc_long,
-            use_qk_l2norm_in_kernel=True,
-            softplus_beta=1.0,
-            softplus_threshold=20.0,
+        core_attn_out = self._run_gdn_recurrence(
+            lambda: fused_sigmoid_gating_delta_rule_update(
+                A_log=self.A_log,
+                dt_bias=self.dt_bias,
+                q=query,
+                k=key,
+                v=value,
+                a=a,
+                b=b,
+                initial_state_source=ssm_states,
+                initial_state_indices=cache_indices,
+                cu_seqlens=query_start_loc_long,
+                use_qk_l2norm_in_kernel=True,
+                softplus_beta=1.0,
+                softplus_threshold=20.0,
+            )
         )
 
         return core_attn_out
@@ -793,18 +858,20 @@ class Qwen3NextGatedDeltaNet(nn.Module):
                 num_decodes, dtype=torch.int32, device=state_indices_d.device
             )
 
-            attn_out_decode = fused_recurrent_gated_delta_rule_update(
-                q=query_d,
-                k=key_d,
-                v=value_d,
-                g=g_d,
-                beta=beta_d,
-                initial_state_source=recurrent_state_source,
-                initial_state_indices=recurrent_state_indices,
-                use_qk_l2norm_in_kernel=True,
-                disable_state_update=True,
-                intermediate_states_buffer=intermediate_ssm_states,
-                cache_steps=draft_token_num,
+            attn_out_decode = self._run_gdn_recurrence(
+                lambda: fused_recurrent_gated_delta_rule_update(
+                    q=query_d,
+                    k=key_d,
+                    v=value_d,
+                    g=g_d,
+                    beta=beta_d,
+                    initial_state_source=recurrent_state_source,
+                    initial_state_indices=recurrent_state_indices,
+                    use_qk_l2norm_in_kernel=True,
+                    disable_state_update=True,
+                    intermediate_states_buffer=intermediate_ssm_states,
+                    cache_steps=draft_token_num,
+                )
             ).view(1, num_decode_tokens, self.num_v_heads // self.attn_tp_size, self.head_v_dim)
 
             if attn_out_prefill is None:
@@ -971,3 +1038,19 @@ class Qwen3NextGatedDeltaNet(nn.Module):
 
         output = self.out_proj(attn_out, all_reduce_params=all_reduce_params)
         return output
+
+
+def configure_gdn_recurrence_stream(
+    model: nn.Module,
+    recurrence_stream: torch.cuda.Stream,
+    parent_stream: torch.cuda.Stream,
+) -> int:
+    """Attach one green-context stream to every GDN layer in ``model``."""
+    configured_layers = 0
+    for module in model.modules():
+        if isinstance(module, Qwen3NextGatedDeltaNet):
+            module.set_gdn_recurrence_stream(recurrence_stream, parent_stream)
+            configured_layers += 1
+    if configured_layers > 0:
+        parent_stream.synchronize()
+    return configured_layers
